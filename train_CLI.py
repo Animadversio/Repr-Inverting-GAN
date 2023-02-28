@@ -48,6 +48,7 @@ args = parser.parse_args()
 
 lpips_net = args.lpips_net
 beta_lpips = args.beta_lpips
+beta_l2 = args.beta_l2
 lr = args.lr
 batch_size = args.batch_size
 max_epochs = args.epochs
