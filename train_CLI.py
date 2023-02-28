@@ -39,7 +39,9 @@ parser.add_argument("--save_root", type=str, default="/n/scratch3/users/b/biw905
 parser.add_argument("--ckpt_path", type=str, default=None)
 parser.add_argument("--batch_size", type=int, default=32)
 parser.add_argument("--lr", type=float, default=1E-3)
+parser.add_argument("--gradclipnorm", type=float, default=10.0)
 parser.add_argument("--to_rgb_layer", type=bool, default=True)
+parser.add_argument("--leaky_relu_rgb", type=bool, default=True)
 parser.add_argument("--beta_lpips", type=float, default=1.0)
 parser.add_argument("--beta_l2", type=float, default=1.0)
 parser.add_argument("--lpips_net", type=str, default="alex")
@@ -59,6 +61,8 @@ max_epochs = args.epochs
 save_every = args.save_every
 save_img_every = args.save_img_every
 to_rgb_layer = args.to_rgb_layer
+leaky_relu_rgb = args.leaky_relu_rgb
+gradclipnorm = args.gradclipnorm
 saveroot = args.save_root
 train_dataroot = args.dataroot # = "E:\Datasets\imagenet-valid"
 if args.ckpt_path is None:
@@ -89,7 +93,8 @@ elif args.blockclass == "Bottleneck_Up":
     blockclass = Bottleneck_Up
 else:
     raise NotImplementedError
-invert_resnet = ResNetInverse([3, 4, 6, 3], to_rgb_layer=to_rgb_layer, blockClass=blockclass).cuda().eval()
+invert_resnet = ResNetInverse([3, 4, 6, 3], blockClass=blockclass,
+                              to_rgb_layer=to_rgb_layer, leaky_relu_rgb=leaky_relu_rgb, ).cuda().eval()
 invert_resnet.requires_grad_(True)
 if ckpt_path is not None:
     invert_resnet.load_state_dict(torch.load(ckpt_path))
@@ -112,12 +117,15 @@ for epoch in range(max_epochs):
             lpipsLoss = Dist(imgtsrs, img_recon, ).squeeze()
         loss = beta_l2 * L2_loss + lpipsLoss * beta_lpips  # TanhL2_loss +
         loss.sum().backward()
+        grad_norm = nn.utils.clip_grad_norm_(invert_resnet.parameters(), gradclipnorm)
         optim.step()
         optim.zero_grad()
         print("L2 loss %.3f   LPIPS loss %.3f" % \
               (L2_loss.mean().item(), lpipsLoss.mean().item()))
         writer.add_scalar("L2_loss", L2_loss.mean().item(), epoch * len(dataloader) + i)
         writer.add_scalar("LPIPS_loss", lpipsLoss.mean().item(), epoch * len(dataloader) + i)
+        writer.add_scalar("grad_norm", grad_norm.item(), epoch * len(dataloader) + i)
+        writer.add_scalar("epoch", epoch, epoch * len(dataloader) + i)
         if i % save_img_every == 0:
             savename = "epoch%d_batch%d" % (epoch, i)
             save_imgrid(imgtsrs_denorm.detach().cpu(),

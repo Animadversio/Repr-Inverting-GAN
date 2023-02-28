@@ -369,6 +369,7 @@ class ResNetInverse(nn.Module):
         blockClass: Type[Union[BasicBlock, Bottleneck_Up, Bottleneck_Up_Antichecker]] = Bottleneck_Up,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
         to_rgb_layer=False,
+        leaky_relu_rgb=False,
     ) -> None:
         super().__init__()
         # _log_api_usage_once(self)
@@ -387,7 +388,8 @@ class ResNetInverse(nn.Module):
             self.layer0 = _make_layers(64, 64, 1, stride=2, blockClass=blockClass)
             self.to_rgb = nn.Sequential(
                 norm_layer(64,), # affine=True),
-                nn.ReLU(inplace=True),
+                # nn.ReLU(inplace=True),
+                nn.LeakyReLU(negative_slope=0.3, inplace=True) if leaky_relu_rgb else nn.ReLU(inplace=True),
                 nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1, bias=True)
             )
         else:

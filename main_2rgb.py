@@ -49,11 +49,11 @@ resnet_repr = ResNetWrapper(resnet_robust).cuda().eval().requires_grad_(False)
 #%%
 # an CNN architecture that inverts resnet50
 to_rgb_layer = True
-invert_resnet = ResNetInverse([3, 4, 6, 3], to_rgb_layer=to_rgb_layer,
+invert_resnet = ResNetInverse([3, 4, 6, 3], to_rgb_layer=to_rgb_layer, leaky_relu_rgb=True,
                               blockClass=Bottleneck_Up_Antichecker).cuda().eval()
 #%%
 saveroot = r"D:\DL_Projects\Vision\Resnet_inverter"
-savedir = join(saveroot, "pilot_alex_lpips5_2rgb_antickbd")
+savedir = join(saveroot, "pilot_alex_lpips5_2rgb_antickbd_gradclip_leaky")
 figdir = join(savedir, "imgs")
 os.makedirs(figdir, exist_ok=True)
 os.makedirs(figdir, exist_ok=True)
@@ -83,12 +83,14 @@ try:
                 lpipsLoss = Dist(imgtsrs, img_recon,).squeeze()
             loss = beta_l2 * L2_loss + lpipsLoss * beta_lpips # TanhL2_loss +
             loss.sum().backward()
+            grad_norm = nn.utils.clip_grad_norm_(invert_resnet.parameters(), 10.0)
             optim.step()
             optim.zero_grad()
-            print("L2 loss %.3f   LPIPS loss %.3f" % \
-                  (L2_loss.mean().item(), lpipsLoss.mean().item()))
+            print("L2 loss %.3f   LPIPS loss %.3f  Gradnorm %.3f" % \
+                  (L2_loss.mean().item(), lpipsLoss.mean().item(), grad_norm.item()))
             writer.add_scalar("L2_loss", L2_loss.mean().item(), epoch * len(dataloader) + i)
             writer.add_scalar("LPIPS_loss", lpipsLoss.mean().item(), epoch * len(dataloader) + i)
+            writer.add_scalar("grad_norm", grad_norm.item(), epoch * len(dataloader) + i)
             if i % 20 == 0:
                 savename = "epoch%d_batch%d"%(epoch, i)
                 save_imgrid(imgtsrs_denorm.detach().cpu(),
