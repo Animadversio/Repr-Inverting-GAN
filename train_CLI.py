@@ -120,5 +120,4 @@ for epoch in range(max_epochs):
                 save_imgrid(denormalizer(img_recon.detach().cpu()).clamp(0, 1),
                             join(savedir, "imgs", f"{savename}_recon.jpg"), nrow=8)
 
-if epoch % save_every == 0:
-        torch.save(invert_resnet.state_dict(), join(savedir, f"model_ep{epoch:03d}.pth"))
+    torch.save(invert_resnet.state_dict(), join(savedir, f"model_ep{epoch:03d}.pth"))
