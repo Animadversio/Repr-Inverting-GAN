@@ -30,15 +30,17 @@ denormalizer = transforms.Normalize(mean=[-0.485/0.229, -0.456/0.224, -0.406/0.2
                                     std=[1/0.229, 1/0.224, 1/0.225])
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--dataroot", type=str, default=r"E:\Datasets\imagenet-valid")
-parser.add_argument("--save_root", type=str, default=r"D:\DL_Projects\Vision\Resnet_inverter")
+parser.add_argument("--dataroot", type=str, default="/home/biw905/Datasets/imagenet-valid")
+#default=r"E:\Datasets\imagenet-valid")
+parser.add_argument("--save_root", type=str, default="/n/scratch3/users/b/biw905/resnet_inverter")
+#default=r"D:\DL_Projects\Vision\Resnet_inverter")
 parser.add_argument("--ckpt_path", type=str, default=None)
 parser.add_argument("--batch_size", type=int, default=32)
 parser.add_argument("--lr", type=float, default=1E-3)
 parser.add_argument("--beta_lpips", type=float, default=5.0)
 parser.add_argument("--lpips_net", type=str, default="alex")
 parser.add_argument("--epochs", type=int, default=100)
-parser.add_argument("--runname", type=str, default="pilot1")
+parser.add_argument("--runname", type=str, default="run1")
 parser.add_argument("--save_every", type=int, default=1)
 parser.add_argument("--save_img_every", type=int, default=20)
 args = parser.parse_args()
@@ -51,16 +53,16 @@ max_epochs = args.epochs
 save_every = args.save_every
 save_img_every = args.save_img_every
 saveroot = args.save_root
+train_dataroot = args.dataroot # = "E:\Datasets\imagenet-valid"
 if args.ckpt_path is None:
     ckpt_path = None
 
-savedir = join(saveroot, args.save_dir)
-figdir = join(savedir, args.fig_dir)
+import datetime
+curtime = datetime.datetime.now()
+savedir = join(saveroot, f"{args.runname}_{curtime.strftime('%Y%m%d_%H%M%S')}")
+figdir = join(savedir, "imgs")
+os.makedirs(savedir, exist_ok=True)
 os.makedirs(figdir, exist_ok=True)
-os.makedirs(figdir, exist_ok=True)
-train_dataroot = args.dataroot # = "E:\Datasets\imagenet-valid"
-savedir  # = "E:\Datasets\imagenet-valid"
-
 
 from torch.utils.tensorboard import SummaryWriter
 from resnet_inverse import ResNetInverse
