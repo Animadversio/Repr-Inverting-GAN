@@ -52,13 +52,13 @@ to_rgb_layer = True
 invert_resnet = ResNetInverse([3, 4, 6, 3], to_rgb_layer=to_rgb_layer).cuda().eval()
 #%%
 saveroot = r"D:\DL_Projects\Vision\Resnet_inverter"
-savedir = join(saveroot, "pilot_alex_lpips2_2rgb")
+savedir = join(saveroot, "pilot_alex_lpips5_2rgb")
 figdir = join(savedir, "imgs")
 os.makedirs(figdir, exist_ok=True)
 os.makedirs(figdir, exist_ok=True)
 #%%
 from torch.utils.tensorboard import SummaryWriter
-beta_lpips = 1.0
+beta_lpips = 5.0
 beta_l2 = 0.5
 dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 invert_resnet.requires_grad_(True)
@@ -74,21 +74,20 @@ try:
 
             img_recon = invert_resnet(acttsr)
             img_recon_denorm = denormalizer(img_recon)
-            L2_loss = torch.mean((img_recon - imgtsrs)**2, dim=(1, 2, 3))
-            TanhL2_loss = torch.mean((torch.tanh(imgtsrs_denorm * 2 - 1) -
-                                      torch.tanh(img_recon_denorm * 2 - 1)) ** 2, dim=(1, 2, 3))
-
-            lpipsLoss = Dist(imgtsrs,
-                             img_recon).squeeze()
+            if to_rgb_layer:
+                L2_loss = torch.mean((img_recon - (imgtsrs_denorm * 2 - 1))**2, dim=(1, 2, 3))
+                lpipsLoss = Dist(img_recon, (imgtsrs_denorm * 2 - 1), normalize=False ).squeeze()
+            else:
+                L2_loss = torch.mean((img_recon - imgtsrs)**2, dim=(1, 2, 3))
+                lpipsLoss = Dist(imgtsrs, img_recon,).squeeze()
             loss = beta_l2 * L2_loss + lpipsLoss * beta_lpips # TanhL2_loss +
             loss.sum().backward()
             optim.step()
             optim.zero_grad()
-            print("L2 loss %.3f  TanhL2 loss %.3f  LPIPS loss %.3f" % \
-                  (L2_loss.mean().item(), TanhL2_loss.mean().item(), lpipsLoss.mean().item()))
+            print("L2 loss %.3f   LPIPS loss %.3f" % \
+                  (L2_loss.mean().item(), lpipsLoss.mean().item()))
             writer.add_scalar("L2_loss", L2_loss.mean().item(), epoch * len(dataloader) + i)
             writer.add_scalar("LPIPS_loss", lpipsLoss.mean().item(), epoch * len(dataloader) + i)
-            writer.add_scalar("TanhL2_loss", TanhL2_loss.mean().item(), epoch * len(dataloader) + i)
             if i % 20 == 0:
                 savename = "epoch%d_batch%d"%(epoch, i)
                 save_imgrid(imgtsrs_denorm.detach().cpu(),

@@ -307,6 +307,7 @@ class ResNetInverse(nn.Module):
         replace_stride_with_dilation: Optional[List[bool]] = None,
         block: Type[Union[BasicBlock, Bottleneck_Up]] = Bottleneck_Up,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
+        to_rgb_layer=False,
     ) -> None:
         super().__init__()
         # _log_api_usage_once(self)
@@ -321,7 +322,16 @@ class ResNetInverse(nn.Module):
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         # self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer0 = _make_layers(64, 3, 1, stride=2)
+        if to_rgb_layer:
+            self.layer0 = _make_layers(64, 64, 1, stride=2)
+            self.to_rgb = nn.Sequential(
+                norm_layer(64,), # affine=True),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1, bias=True)
+            )
+        else:
+            self.layer0 = _make_layers(64, 3, 1, stride=2)
+            self.to_rgb = nn.Identity()
         self.layer1 = _make_layers(256, 64, layers[0], stride=2)
         self.layer2 = _make_layers(512, 256, layers[1], stride=2, )
         self.layer3 = _make_layers(1024, 512, layers[2], stride=2, )
@@ -358,6 +368,7 @@ class ResNetInverse(nn.Module):
         # x = self.deconv1(x)
         x = self.layer0(x)
         # print(x.shape)
+        x = self.to_rgb(x)
         return x
 
 

@@ -37,6 +37,7 @@ parser.add_argument("--save_root", type=str, default="/n/scratch3/users/b/biw905
 parser.add_argument("--ckpt_path", type=str, default=None)
 parser.add_argument("--batch_size", type=int, default=32)
 parser.add_argument("--lr", type=float, default=1E-3)
+parser.add_argument("--to_rgb_layer", type=bool, default=True)
 parser.add_argument("--beta_lpips", type=float, default=1.0)
 parser.add_argument("--beta_l2", type=float, default=1.0)
 parser.add_argument("--lpips_net", type=str, default="alex")
@@ -54,6 +55,7 @@ batch_size = args.batch_size
 max_epochs = args.epochs
 save_every = args.save_every
 save_img_every = args.save_img_every
+to_rgb_layer = args.to_rgb_layer
 saveroot = args.save_root
 train_dataroot = args.dataroot # = "E:\Datasets\imagenet-valid"
 if args.ckpt_path is None:
@@ -78,7 +80,7 @@ resnet_robust.load_state_dict(torch.load(
 resnet_repr = ResNetWrapper(resnet_robust).cuda().eval().requires_grad_(False)
 dataset = ImageFolder(root=train_dataroot, transform=preprocess)
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-invert_resnet = ResNetInverse([3, 4, 6, 3]).cuda().eval()
+invert_resnet = ResNetInverse([3, 4, 6, 3], to_rgb_layer=to_rgb_layer).cuda().eval()
 invert_resnet.requires_grad_(True)
 if ckpt_path is not None:
     invert_resnet.load_state_dict(torch.load(ckpt_path))
@@ -93,28 +95,26 @@ for epoch in range(max_epochs):
 
         img_recon = invert_resnet(acttsr)
         img_recon_denorm = denormalizer(img_recon)
-        L2_loss = torch.mean((img_recon - imgtsrs) ** 2, dim=(1, 2, 3))
-        TanhL2_loss = torch.mean((torch.tanh(imgtsrs_denorm * 2 - 1) -
-                                  torch.tanh(img_recon_denorm * 2 - 1)) ** 2, dim=(1, 2, 3))
-        # lpipsLoss = Dist(imgtsrs_denorm,
-        #                  img_recon_denorm.clamp(0, 1),
-        #                  normalize=True).squeeze()
-        lpipsLoss = Dist(imgtsrs,
-                         img_recon, ).squeeze()
+        if to_rgb_layer:
+            L2_loss = torch.mean((img_recon - (imgtsrs_denorm * 2 - 1)) ** 2, dim=(1, 2, 3))
+            lpipsLoss = Dist(img_recon, (imgtsrs_denorm * 2 - 1), normalize=False).squeeze()
+        else:
+            L2_loss = torch.mean((img_recon - imgtsrs) ** 2, dim=(1, 2, 3))
+            lpipsLoss = Dist(imgtsrs, img_recon, ).squeeze()
         loss = beta_l2 * L2_loss + lpipsLoss * beta_lpips  # TanhL2_loss +
         loss.sum().backward()
         optim.step()
         optim.zero_grad()
-        print("L2 loss %.3f  TanhL2 loss %.3f  LPIPS loss %.3f" % \
-              (L2_loss.mean().item(), TanhL2_loss.mean().item(), lpipsLoss.mean().item()))
+        print("L2 loss %.3f   LPIPS loss %.3f" % \
+              (L2_loss.mean().item(), lpipsLoss.mean().item()))
         writer.add_scalar("L2_loss", L2_loss.mean().item(), epoch * len(dataloader) + i)
         writer.add_scalar("LPIPS_loss", lpipsLoss.mean().item(), epoch * len(dataloader) + i)
-        writer.add_scalar("TanhL2_loss", TanhL2_loss.mean().item(), epoch * len(dataloader) + i)
-        if i % save_img_every == 0:
-            savename = "epoch%d_batch%d"%(epoch, i)
-            save_imgrid(denormalizer(imgtsrs.detach().cpu()).clamp(0, 1),
+        if i % 20 == 0:
+            savename = "epoch%d_batch%d" % (epoch, i)
+            save_imgrid(imgtsrs_denorm.detach().cpu(),
                         join(savedir, "imgs", f"{savename}_orig.jpg"), nrow=8)
             save_imgrid(denormalizer(img_recon.detach().cpu()).clamp(0, 1),
                         join(savedir, "imgs", f"{savename}_recon.jpg"), nrow=8)
-    if epoch % save_every == 0:
+
+if epoch % save_every == 0:
         torch.save(invert_resnet.state_dict(), join(savedir, f"model_ep{epoch:03d}.pth"))
