@@ -37,7 +37,8 @@ parser.add_argument("--save_root", type=str, default="/n/scratch3/users/b/biw905
 parser.add_argument("--ckpt_path", type=str, default=None)
 parser.add_argument("--batch_size", type=int, default=32)
 parser.add_argument("--lr", type=float, default=1E-3)
-parser.add_argument("--beta_lpips", type=float, default=5.0)
+parser.add_argument("--beta_lpips", type=float, default=1.0)
+parser.add_argument("--beta_l2", type=float, default=1.0)
 parser.add_argument("--lpips_net", type=str, default="alex")
 parser.add_argument("--epochs", type=int, default=100)
 parser.add_argument("--runname", type=str, default="run1")
@@ -57,12 +58,14 @@ train_dataroot = args.dataroot # = "E:\Datasets\imagenet-valid"
 if args.ckpt_path is None:
     ckpt_path = None
 
+import json
 import datetime
 curtime = datetime.datetime.now()
 savedir = join(saveroot, f"{args.runname}_{curtime.strftime('%Y%m%d_%H%M%S')}")
 figdir = join(savedir, "imgs")
 os.makedirs(savedir, exist_ok=True)
 os.makedirs(figdir, exist_ok=True)
+json.dump(vars(args), open(join(savedir, f"train_args.json"), "w"), indent=4)
 
 from torch.utils.tensorboard import SummaryWriter
 from resnet_inverse import ResNetInverse
@@ -89,17 +92,20 @@ for epoch in range(max_epochs):
 
         img_recon = invert_resnet(acttsr)
         img_recon_denorm = denormalizer(img_recon)
-        L2_loss = torch.mean((img_recon - imgtsrs)**2, dim=(1,2,3))
+        L2_loss = torch.mean((img_recon - imgtsrs) ** 2, dim=(1, 2, 3))
         TanhL2_loss = torch.mean((torch.tanh(imgtsrs_denorm * 2 - 1) -
-                              torch.tanh(img_recon_denorm * 2 - 1)) ** 2, dim=(1, 2, 3))
-        lpipsLoss = Dist(imgtsrs_denorm,
-                         img_recon_denorm.clamp(0, 1),
-                         normalize=True).squeeze()
-        loss = TanhL2_loss + lpipsLoss * beta_lpips
+                                  torch.tanh(img_recon_denorm * 2 - 1)) ** 2, dim=(1, 2, 3))
+        # lpipsLoss = Dist(imgtsrs_denorm,
+        #                  img_recon_denorm.clamp(0, 1),
+        #                  normalize=True).squeeze()
+        lpipsLoss = Dist(imgtsrs,
+                         img_recon, ).squeeze()
+        loss = beta_l2 * L2_loss + lpipsLoss * beta_lpips  # TanhL2_loss +
         loss.sum().backward()
         optim.step()
         optim.zero_grad()
-        print("L2 loss %.3f  LPIPS loss %.3f"%(L2_loss.mean().item(), lpipsLoss.mean().item()))
+        print("L2 loss %.3f  TanhL2 loss %.3f  LPIPS loss %.3f" % \
+              (L2_loss.mean().item(), TanhL2_loss.mean().item(), lpipsLoss.mean().item()))
         writer.add_scalar("L2_loss", L2_loss.mean().item(), epoch * len(dataloader) + i)
         writer.add_scalar("LPIPS_loss", lpipsLoss.mean().item(), epoch * len(dataloader) + i)
         writer.add_scalar("TanhL2_loss", TanhL2_loss.mean().item(), epoch * len(dataloader) + i)
