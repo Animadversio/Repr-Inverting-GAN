@@ -109,12 +109,16 @@ for epoch in range(max_epochs):
               (L2_loss.mean().item(), lpipsLoss.mean().item()))
         writer.add_scalar("L2_loss", L2_loss.mean().item(), epoch * len(dataloader) + i)
         writer.add_scalar("LPIPS_loss", lpipsLoss.mean().item(), epoch * len(dataloader) + i)
-        if i % 20 == 0:
+        if i % save_img_every == 0:
             savename = "epoch%d_batch%d" % (epoch, i)
             save_imgrid(imgtsrs_denorm.detach().cpu(),
                         join(savedir, "imgs", f"{savename}_orig.jpg"), nrow=8)
-            save_imgrid(denormalizer(img_recon.detach().cpu()).clamp(0, 1),
-                        join(savedir, "imgs", f"{savename}_recon.jpg"), nrow=8)
+            if to_rgb_layer:
+                save_imgrid(((img_recon.detach().cpu() + 1) / 2).clamp(0, 1),
+                            join(savedir, "imgs", f"{savename}_recon.jpg"), nrow=8)
+            else:
+                save_imgrid(denormalizer(img_recon.detach().cpu()).clamp(0, 1),
+                            join(savedir, "imgs", f"{savename}_recon.jpg"), nrow=8)
 
 if epoch % save_every == 0:
         torch.save(invert_resnet.state_dict(), join(savedir, f"model_ep{epoch:03d}.pth"))

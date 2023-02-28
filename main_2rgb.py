@@ -92,9 +92,12 @@ try:
                 savename = "epoch%d_batch%d"%(epoch, i)
                 save_imgrid(imgtsrs_denorm.detach().cpu(),
                             join(savedir, "imgs", f"{savename}_orig.jpg"), nrow=8)
-                save_imgrid(denormalizer(img_recon.detach().cpu()).clamp(0, 1),
+                if to_rgb_layer:
+                    save_imgrid(((img_recon.detach().cpu() + 1) / 2).clamp(0, 1),
                             join(savedir, "imgs", f"{savename}_recon.jpg"), nrow=8)
-
+                else:
+                    save_imgrid(denormalizer(img_recon.detach().cpu()).clamp(0, 1),
+                            join(savedir, "imgs", f"{savename}_recon.jpg"), nrow=8)
         torch.save(invert_resnet.state_dict(), join(savedir, f"model_ep{epoch:03d}.pth"))
 except KeyboardInterrupt:
     pass
