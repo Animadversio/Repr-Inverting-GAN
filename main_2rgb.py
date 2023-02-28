@@ -31,7 +31,7 @@ denormalizer = transforms.Normalize(mean=[-0.485/0.229, -0.456/0.224, -0.406/0.2
 dataset = ImageFolder(root="E:\Datasets\imagenet-valid", transform=preprocess)
 dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 #%%
-from resnet_inverse import ResNetInverse, ResNetWrapper
+from resnet_inverse import ResNetInverse, ResNetWrapper, Bottleneck_Up_Antichecker
 
 Dist = LPIPS(net="alex").cuda().eval()
 resnet_robust = resnet50(pretrained=True)
@@ -49,10 +49,11 @@ resnet_repr = ResNetWrapper(resnet_robust).cuda().eval().requires_grad_(False)
 #%%
 # an CNN architecture that inverts resnet50
 to_rgb_layer = True
-invert_resnet = ResNetInverse([3, 4, 6, 3], to_rgb_layer=to_rgb_layer).cuda().eval()
+invert_resnet = ResNetInverse([3, 4, 6, 3], to_rgb_layer=to_rgb_layer,
+                              blockClass=Bottleneck_Up_Antichecker).cuda().eval()
 #%%
 saveroot = r"D:\DL_Projects\Vision\Resnet_inverter"
-savedir = join(saveroot, "pilot_alex_lpips5_2rgb")
+savedir = join(saveroot, "pilot_alex_lpips5_2rgb_antickbd")
 figdir = join(savedir, "imgs")
 os.makedirs(figdir, exist_ok=True)
 os.makedirs(figdir, exist_ok=True)

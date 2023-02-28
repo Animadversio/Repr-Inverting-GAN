@@ -13,7 +13,9 @@ from torchvision.datasets import ImageFolder
 from torchvision import transforms
 from torchvision.models import resnet50
 from lpips import LPIPS
-from resnet_inverse import ResNetInverse, ResNetWrapper
+from resnet_inverse import ResNetInverse, ResNetWrapper, \
+    Bottleneck_Up_Antichecker, Bottleneck_Up
+
 
 preprocess = transforms.Compose([
     # transforms.Resize(256),
@@ -45,6 +47,7 @@ parser.add_argument("--epochs", type=int, default=100)
 parser.add_argument("--runname", type=str, default="run1")
 parser.add_argument("--save_every", type=int, default=1)
 parser.add_argument("--save_img_every", type=int, default=20)
+parser.add_argument("--blockclass", type=str, default="Bottleneck_Up_Antichecker")
 args = parser.parse_args()
 
 lpips_net = args.lpips_net
@@ -80,7 +83,13 @@ resnet_robust.load_state_dict(torch.load(
 resnet_repr = ResNetWrapper(resnet_robust).cuda().eval().requires_grad_(False)
 dataset = ImageFolder(root=train_dataroot, transform=preprocess)
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-invert_resnet = ResNetInverse([3, 4, 6, 3], to_rgb_layer=to_rgb_layer).cuda().eval()
+if args.blockclass == "Bottleneck_Up_Antichecker":
+    blockclass = Bottleneck_Up_Antichecker
+elif args.blockclass == "Bottleneck_Up":
+    blockclass = Bottleneck_Up
+else:
+    raise NotImplementedError
+invert_resnet = ResNetInverse([3, 4, 6, 3], to_rgb_layer=to_rgb_layer, blockClass=blockclass).cuda().eval()
 invert_resnet.requires_grad_(True)
 if ckpt_path is not None:
     invert_resnet.load_state_dict(torch.load(ckpt_path))

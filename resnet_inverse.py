@@ -158,6 +158,68 @@ class Bottleneck_Up(nn.Module):
 
         return out
 
+class Bottleneck_Up_Antichecker(nn.Module):
+    # Bottleneck in torchvision places the stride for downsampling at 3x3 convolution(self.conv2)
+    # while original implementation places the stride at the first 1x1 convolution(self.conv1)
+    # according to "Deep residual learning for image recognition"https://arxiv.org/abs/1512.03385.
+    # This variant is also known as ResNet V1.5 and improves accuracy according to
+    # https://ngc.nvidia.com/catalog/model-scripts/nvidia:resnet_50_v1_5_for_pytorch.
+
+    expansion: int = 4
+
+    def __init__(
+        self,
+        inplanes: int,
+        planes: int,
+        stride: int = 1,
+        upsample: Optional[nn.Module] = None,
+        groups: int = 1,
+        base_width: int = 64,
+        dilation: int = 1,
+        norm_layer: Optional[Callable[..., nn.Module]] = None,
+    ) -> None:
+        super().__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+        width = int(planes * (base_width / 64.0)) * groups
+        # Both self.conv2 and self.downsample layers downsample the input when stride != 1
+        self.conv1 = conv1x1(planes * self.expansion, width)
+        self.bn1 = norm_layer(width)
+        if not stride == 1:
+            self.conv_upsample = nn.Upsample(scale_factor=stride, mode='bilinear', align_corners=True)
+        else:
+            self.conv_upsample = nn.Identity()
+        self.conv2 = conv3x3(width, width, 1, groups, dilation)
+        self.bn2 = norm_layer(width)
+        self.conv3 = conv1x1(width, inplanes)
+        self.bn3 = norm_layer(inplanes)
+        self.relu = nn.ReLU(inplace=True)
+        self.upsample = upsample
+        self.stride = stride
+
+    def forward(self, x: Tensor) -> Tensor:
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv_upsample(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.upsample is not None:
+            identity = self.upsample(x)
+            # print(identity.shape)
+            # print(out.shape)
+        out += identity
+        out = self.relu(out)
+
+        return out
 
 class ResNet(nn.Module):
     def __init__(
@@ -280,7 +342,8 @@ class ResNet(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return self._forward_impl(x)
 #%%
-def _make_layers(inplanes, outplanes, layernum, stride=2, expansion=4):
+def _make_layers(inplanes, outplanes, layernum, stride=2, expansion=4,
+                 blockClass=Bottleneck_Up):
     upsampler = nn.Sequential(
         nn.Upsample(scale_factor=stride, mode='bilinear', align_corners=True),
         conv1x1(inplanes, outplanes, stride=1),
@@ -289,9 +352,9 @@ def _make_layers(inplanes, outplanes, layernum, stride=2, expansion=4):
     layers = []
     for i in range(layernum):
         if i == layernum - 1:
-            layer = Bottleneck_Up(outplanes, inplanes // expansion, stride=stride, upsample=upsampler)
+            layer = blockClass(outplanes, inplanes // expansion, stride=stride, upsample=upsampler)
         else:
-            layer = Bottleneck_Up(inplanes, inplanes // expansion, stride=1)
+            layer = blockClass(inplanes, inplanes // expansion, stride=1)
         layers.append(layer)
     return nn.Sequential(*layers)
 
@@ -300,12 +363,10 @@ class ResNetInverse(nn.Module):
     def __init__(
         self,
         layers: List[int],
-        num_classes: int = 1000,
         zero_init_residual: bool = False,
         groups: int = 1,
         width_per_group: int = 64,
-        replace_stride_with_dilation: Optional[List[bool]] = None,
-        block: Type[Union[BasicBlock, Bottleneck_Up]] = Bottleneck_Up,
+        blockClass: Type[Union[BasicBlock, Bottleneck_Up, Bottleneck_Up_Antichecker]] = Bottleneck_Up,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
         to_rgb_layer=False,
     ) -> None:
@@ -323,7 +384,7 @@ class ResNetInverse(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         # self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         if to_rgb_layer:
-            self.layer0 = _make_layers(64, 64, 1, stride=2)
+            self.layer0 = _make_layers(64, 64, 1, stride=2, blockClass=blockClass)
             self.to_rgb = nn.Sequential(
                 norm_layer(64,), # affine=True),
                 nn.ReLU(inplace=True),
@@ -332,10 +393,10 @@ class ResNetInverse(nn.Module):
         else:
             self.layer0 = _make_layers(64, 3, 1, stride=2)
             self.to_rgb = nn.Identity()
-        self.layer1 = _make_layers(256, 64, layers[0], stride=2)
-        self.layer2 = _make_layers(512, 256, layers[1], stride=2, )
-        self.layer3 = _make_layers(1024, 512, layers[2], stride=2, )
-        self.layer4 = _make_layers(2048, 1024, layers[3], stride=2, )
+        self.layer1 = _make_layers(256, 64, layers[0], stride=2, blockClass=blockClass)
+        self.layer2 = _make_layers(512, 256, layers[1], stride=2, blockClass=blockClass)
+        self.layer3 = _make_layers(1024, 512, layers[2], stride=2, blockClass=blockClass)
+        self.layer4 = _make_layers(2048, 1024, layers[3], stride=2, blockClass=blockClass)
         # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         # self.fc = nn.Linear(512 * block.expansion, num_classes)
         # for m in self.modules():
