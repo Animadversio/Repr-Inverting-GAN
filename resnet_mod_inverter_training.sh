@@ -4,9 +4,9 @@
 #SBATCH -t 8:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --mem=16G
-#SBATCH --array=10-12
+#SBATCH --array=1-3
 #SBATCH --mail-user=binxu_wang@hms.harvard.edu
-#SBATCH -o invert_resnet_%j.out
+#SBATCH -o invert_resnet_mod_%j.out
 
 echo "$SLURM_ARRAY_TASK_ID"
 
