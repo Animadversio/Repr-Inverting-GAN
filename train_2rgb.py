@@ -39,14 +39,6 @@ resnet_robust.load_state_dict(torch.load(
     join(torch.hub.get_dir(), "checkpoints", "imagenet_linf_8_pure.pt")))
 resnet_repr = ResNetWrapper(resnet_robust).cuda().eval().requires_grad_(False)
 #%%
-# for imgtsrs, _ in dataloader:
-#     imgtsrs = imgtsrs.cuda()
-#     with torch.no_grad():
-#         act_vec, acttsr = resnet_repr(imgtsrs)
-#     break
-# #%
-# show_imgrid(denormalizer(imgtsrs), nrow=8)
-#%%
 # an CNN architecture that inverts resnet50
 to_rgb_layer = True
 invert_resnet = ResNetInverse([3, 4, 6, 3], to_rgb_layer=to_rgb_layer, leaky_relu_rgb=True,
