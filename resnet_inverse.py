@@ -33,6 +33,7 @@ def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, d
 
 def conv3x3_transpose(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.ConvTranspose2d:
     """3x3 convolution with padding"""
+    # it;s noticed that transposed conv is not as good as upsample + conv... can induce checkerboard artifacts
     return nn.ConvTranspose2d(
         in_planes,
         out_planes,
@@ -387,10 +388,10 @@ class ResNetInverse(nn.Module):
         if to_rgb_layer:
             self.layer0 = _make_layers(64, 64, 1, stride=2, blockClass=blockClass)
             self.to_rgb = nn.Sequential(
-                norm_layer(64,), # affine=True),
-                # nn.ReLU(inplace=True),
+                norm_layer(64,),  # affine=True),
                 nn.LeakyReLU(negative_slope=0.3, inplace=True) if leaky_relu_rgb else nn.ReLU(inplace=True),
-                nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1, bias=True)
+                nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1, bias=True),
+                nn.Tanh(),
             )
         else:
             self.layer0 = _make_layers(64, 3, 1, stride=2)
@@ -420,17 +421,12 @@ class ResNetInverse(nn.Module):
 
     def forward(self, x):
         x = self.layer4(x)
-        # print(x.shape)
         x = self.layer3(x)
-        # print(x.shape)
         x = self.layer2(x)
-        # print(x.shape)
         x = self.layer1(x)
-        # print(x.shape)
         # x = self.bn1(x)
         # x = self.deconv1(x)
         x = self.layer0(x)
-        # print(x.shape)
         x = self.to_rgb(x)
         return x
 
